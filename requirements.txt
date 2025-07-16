@@ -1,0 +1,49 @@
+# Core web framework
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
+
+# LangChain core
+langchain>=0.3.0
+langgraph>=0.4.0
+langgraph-prebuilt>=0.2.0
+langchain-core>=0.3.0
+langsmith>=0.1.0
+langchain_community>=0.3.0
+
+# LLM providers
+langchain-google-genai>=2.0.0
+langchain-openai>=0.2.0
+langchain_deepseek>=0.1.0
+langchain-xai>=0.1.0
+
+# Tools and integrations
+langchain_tavily>=0.1.0
+langchain_chroma>=0.1.0
+dashscope>=1.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+httpx>=0.25.0
+anyio>=4.0.0
+python-docx>=1.0.0
+graphviz>=0.20.0
+
+# Database
+#neo4j>=5.14.0
+#langchain-neo4j>=0.4.0
+
+# 中文分词
+jieba>=0.42.1
+
+# Additional utilities
+typing-extensions>=4.8.0
+loguru>=0.7.0
+
+# Development and testing
+pytest>=7.0.0
+pytest-asyncio>=0.21.0
+pytest-mock>=3.11.0
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
