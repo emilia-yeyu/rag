@@ -57,8 +57,6 @@ class DatabaseManager:
                 'title': person['title'],
                 'department': person['department'],
                 'office_location': person['office_location'],
-                'phone': person['phone'],
-                'email': person['email'],
                 'avatar_url': person['avatar_url'],
                 'bio': person['bio'],
                 'meetings': []
@@ -110,15 +108,13 @@ class DatabaseManager:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("""
-                    INSERT INTO person_info (name, title, department, office_location, phone, email, bio)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO person_info (name, title, department, office_location, bio)
+                    VALUES (?, ?, ?, ?, ?)
                 """, (
                     person_data.get('name'),
                     person_data.get('title'),
                     person_data.get('department'),
                     person_data.get('office_location'),
-                    person_data.get('phone'),
-                    person_data.get('email'),
                     person_data.get('bio')
                 ))
                 conn.commit()
@@ -174,7 +170,7 @@ if __name__ == "__main__":
     db = DatabaseManager()
     
     # 测试查询
-    person = db.get_person_info("张三")
+    person = db.get_person_info("肖刚军")
     if person:
         print(json.dumps(person, ensure_ascii=False, indent=2))
     else:
