@@ -22,6 +22,7 @@ class EmbeddingAdapter:
         "openai",
         "dashscope",
         "google",
+        "bge",  # 添加 bge 支持
     }
     
     # 提供商到构建方法名称的映射
@@ -29,6 +30,7 @@ class EmbeddingAdapter:
         "openai": "_build_openai_embedding",
         "dashscope": "_build_dashscope_embedding",
         "google": "_build_google_embedding",
+        "bge": "_build_bge_embedding",  # 添加 bge 构建方法
     }
 
     @staticmethod
@@ -191,3 +193,231 @@ class EmbeddingAdapter:
             return embedding
         except Exception as e:
             raise EmbeddingAdapterError(f"实例化 Google Embedding (模型: {model_name}) 时出错: {e}")
+
+    @staticmethod
+    def _get_local_model_path(model_name: str) -> Optional[str]:
+        """
+        获取本地模型路径，如果不存在则返回None。
+        
+        Args:
+            model_name: 模型名称，例如 "BAAI/bge-large-zh-v1.5"
+        
+        Returns:
+            本地模型路径或None
+        """
+        # 将huggingface模型名称转换为本地缓存目录名称
+        cache_name = model_name.replace("/", "--")
+        cache_name = f"models--{cache_name}"
+        
+        # 获取项目根目录并构建模型路径
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 回到 RAG 目录
+        model_base_path = os.path.join(script_dir, "models", "embeddings", cache_name)
+        
+        # 检查是否存在main引用文件
+        main_ref_path = os.path.join(model_base_path, "refs", "main")
+        if os.path.exists(main_ref_path):
+            # 读取main引用指向的snapshot
+            try:
+                with open(main_ref_path, 'r') as f:
+                    snapshot_hash = f.read().strip()
+                
+                # 构建完整的snapshot路径
+                snapshot_path = os.path.join(model_base_path, "snapshots", snapshot_hash)
+                
+                # 验证snapshot路径存在且包含必要的配置文件
+                if os.path.exists(snapshot_path) and os.path.exists(os.path.join(snapshot_path, "config.json")):
+                    return snapshot_path
+            except Exception:
+                pass
+        
+        return None
+
+    @staticmethod
+    def _build_bge_embedding(model_name: Optional[str] = None) -> 'Embeddings':
+        """
+        构建 BGE (BAAI General Embedding) 的 LangChain Embedding 实例。
+        优先使用本地模型，如果不存在则使用 HuggingFace 在线模型。
+        
+        Args:
+            model_name: BGE嵌入模型名称，如果为None则使用默认模型"BAAI/bge-large-zh-v1.5"
+        
+        Returns:
+            配置好的BGE嵌入模型实例
+        """
+        # 1. 按需导入
+        HuggingFaceEmbeddings = EmbeddingAdapter._lazy_import('langchain_huggingface', 'HuggingFaceEmbeddings')
+
+        # 2. 设置模型名称
+        model = model_name if model_name else "BAAI/bge-large-zh-v1.5"
+        
+        # 3. 尝试获取本地模型路径
+        local_model_path = EmbeddingAdapter._get_local_model_path(model)
+        actual_model_path = local_model_path if local_model_path else model
+        ## 3. 尝试获取本地模型路径
+        #local_model_path = EmbeddingAdapter._get_local_model_path(model)
+        #actual_model_path = local_model_path if local_model_path else model
+
+        # 获取项目根目录并设置模型缓存目录
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 回到 RAG 目录
+        cache_dir = os.path.join(script_dir, "models", "embeddings")
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # 4. 实例化
+        try:
+            # BGE 模型的推荐配置
+            encode_kwargs = {
+                'normalize_embeddings': True,  # BGE 推荐归一化
+                'batch_size': 32,  # 合适的批处理大小
+            }
+            
+            # 模型配置
+            model_kwargs = {
+                'device': 'cpu',  # 可以根据需要改为 'cuda'
+                'trust_remote_code': True,  # BGE 模型需要此选项
+            }
+            
+            embedding = HuggingFaceEmbeddings(
+                model_name=actual_model_path,#model
+                model_kwargs=model_kwargs,
+                encode_kwargs=encode_kwargs,
+                show_progress=True,  # 显示下载进度
+                cache_folder=cache_dir if not local_model_path else None,  # 本地模型不需要额外缓存
+            )
+            
+            if local_model_path:
+                print(f"✅ 成功构建 BGE Embedding (本地模型): 路径='{local_model_path}'")
+            else:
+                print(f"✅ 成功构建 BGE Embedding (在线模型): 模型='{model}'")
+                print(f"📁 模型缓存目录: {cache_dir}")
+                print(f"注意: 首次使用会下载模型到指定目录，请耐心等待")
+            
+            return embedding
+        except Exception as e:
+            error_msg = f"实例化 BGE Embedding 时出错: {e}"
+            if local_model_path:
+                error_msg += f"\n本地模型路径: {local_model_path}"
+            else:
+                error_msg += f"\n在线模型: {model}"
+            raise EmbeddingAdapterError(error_msg)
+
+
+
+
+"""     @staticmethod
+    def _get_local_model_path(model_name: str) -> Optional[str]:
+        '''
+        获取本地模型路径，如果不存在则返回None。
+        
+        Args:
+            model_name: 模型名称，例如 "BAAI/bge-large-zh-v1.5"
+        
+        Returns:
+            本地模型路径或None
+        '''
+        # 将huggingface模型名称转换为本地缓存目录名称
+        cache_name = model_name.replace("/", "--")
+        cache_name = f"models--{cache_name}"
+        
+        # 获取项目根目录并构建模型路径
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 回到 RAG 目录
+        model_base_path = os.path.join(script_dir, "models", "embeddings", cache_name)
+        
+        # 检查是否存在main引用文件
+        main_ref_path = os.path.join(model_base_path, "refs", "main")
+        if os.path.exists(main_ref_path):
+            # 读取main引用指向的snapshot
+            try:
+                with open(main_ref_path, 'r') as f:
+                    snapshot_hash = f.read().strip()
+                
+                # 构建完整的snapshot路径
+                snapshot_path = os.path.join(model_base_path, "snapshots", snapshot_hash)
+                
+                # 验证snapshot路径存在且包含必要的配置文件
+                if os.path.exists(snapshot_path) and os.path.exists(os.path.join(snapshot_path, "config.json")):
+                    return snapshot_path
+            except Exception:
+                pass
+        
+        return None
+
+    @staticmethod
+    def _build_bge_embedding(model_name: Optional[str] = None) -> 'Embeddings':
+        '''
+        构建 BGE (BAAI General Embedding) 的 LangChain Embedding 实例。
+        优先使用本地微调模型，如果不存在则使用 HuggingFace 在线模型。
+        
+        Args:
+            model_name: BGE嵌入模型名称，如果为None则使用默认模型"BAAI/bge-large-zh-v1.5"
+        
+        Returns:
+            配置好的BGE嵌入模型实例
+        '''
+        # 1. 按需导入
+        HuggingFaceEmbeddings = EmbeddingAdapter._lazy_import('langchain_huggingface', 'HuggingFaceEmbeddings')
+
+        # 2. 设置模型名称
+        model = model_name if model_name else "BAAI/bge-large-zh-v1.5"
+        
+        # 3. 优先检查微调模型路径
+        script_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 回到 RAG 目录
+        fine_tuned_model_path = os.path.join(script_dir, "models", "ft_BAAI_bge-large-zh-v1.5")
+        
+        # 检查微调模型是否存在
+        if os.path.exists(fine_tuned_model_path) and os.path.exists(os.path.join(fine_tuned_model_path, "config.json")):
+            actual_model_path = fine_tuned_model_path
+            is_fine_tuned = True
+            print(f"🎯 发现微调模型: {fine_tuned_model_path}")
+        else:
+            # 降级到原来的逻辑：尝试获取本地模型路径
+            local_model_path = EmbeddingAdapter._get_local_model_path(model)
+            actual_model_path = local_model_path if local_model_path else model
+            is_fine_tuned = False
+        
+        # 设置模型缓存目录（微调模型不需要缓存）
+        cache_dir = os.path.join(script_dir, "models", "embeddings")
+        if not is_fine_tuned:
+            os.makedirs(cache_dir, exist_ok=True)
+        
+        # 4. 实例化
+        try:
+            # BGE 模型的推荐配置
+            encode_kwargs = {
+                'normalize_embeddings': True,  # BGE 推荐归一化
+                'batch_size': 32,  # 合适的批处理大小
+            }
+            
+            # 模型配置
+            model_kwargs = {
+                'device': 'cpu',  # 可以根据需要改为 'cuda'
+                'trust_remote_code': True,  # BGE 模型需要此选项
+            }
+            
+            embedding = HuggingFaceEmbeddings(
+                model_name=actual_model_path,
+                model_kwargs=model_kwargs,
+                encode_kwargs=encode_kwargs,
+                show_progress=True,  # 显示下载进度
+                cache_folder=cache_dir if not is_fine_tuned else None,  # 微调模型不需要额外缓存
+            )
+            
+            if is_fine_tuned:
+                print(f"✅ 成功构建 BGE Embedding (微调模型): 路径='{actual_model_path}'")
+                print(f"🔥 使用您训练的微调模型！")
+            elif actual_model_path != model:
+                print(f"✅ 成功构建 BGE Embedding (本地模型): 路径='{actual_model_path}'")
+            else:
+                print(f"✅ 成功构建 BGE Embedding (在线模型): 模型='{model}'")
+                print(f"📁 模型缓存目录: {cache_dir}")
+                print(f"注意: 首次使用会下载模型到指定目录，请耐心等待")
+            
+            return embedding
+        except Exception as e:
+            error_msg = f"实例化 BGE Embedding 时出错: {e}"
+            if is_fine_tuned:
+                error_msg += f"\n微调模型路径: {actual_model_path}"
+            elif actual_model_path != model:
+                error_msg += f"\n本地模型路径: {actual_model_path}"
+            else:
+                error_msg += f"\n在线模型: {model}"
+            raise EmbeddingAdapterError(error_msg) """

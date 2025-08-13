@@ -32,6 +32,7 @@ class LLMAdapter:
         "openai",
         "xai",
         "oneapi",
+        "local",
     }
     
     # 提供商到构建方法名称的映射
@@ -43,6 +44,7 @@ class LLMAdapter:
         "openai": "_build_openai_llm",
         "xai": "_build_xai_llm",
         "oneapi": "_build_oneapi_llm",
+        "local": "_build_local_llm",
     }
 
     @staticmethod
@@ -51,8 +53,8 @@ class LLMAdapter:
         获取指定提供商和模型的 LangChain LLM 实例。
 
         Args:
-            provider: LLM 提供商名称 (例如 "openrouter", "deepseek", "dashscope", "google", "openai", "oneapi")。
-            model_name: 具体的模型名称 (例如 "google/gemini-2.0-flash-001", "deepseek-chat", "qwen-plus-latest", "gemini-2.0-flash", "gpt-4o")。
+            provider: LLM 提供商名称 (例如 "openrouter", "deepseek", "dashscope", "google", "openai", "oneapi", "local")。
+            model_name: 具体的模型名称 (例如 "google/gemini-2.0-flash-001", "deepseek-chat", "qwen-plus-latest", "gemini-2.0-flash", "gpt-4o", 或本地模型路径)。
             temperature: 温度参数，控制输出的随机性。默认为 0.7。
             **kwargs: 其他特定于提供商的配置参数。
 
@@ -263,3 +265,4 @@ class LLMAdapter:
             return llm
         except Exception as e:
             raise LLMAdapterError(f"实例化 One API LLM (模型: {model_name}) 时出错: {e}")
+

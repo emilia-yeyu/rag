@@ -16,6 +16,13 @@ langchain-openai>=0.2.0
 langchain_deepseek>=0.1.0
 langchain-xai>=0.1.0
 
+# Embedding providers
+langchain-huggingface>=0.1.0
+sentence-transformers>=2.2.0
+transformers>=4.30.0
+torch>=2.0.0
+FlagEmbedding>=1.2.0
+
 # Tools and integrations
 langchain_tavily>=0.1.0
 langchain_chroma>=0.1.0
@@ -39,6 +46,10 @@ jieba>=0.42.1
 # Additional utilities
 typing-extensions>=4.8.0
 loguru>=0.7.0
+
+# Hugging Face Hub for model downloading
+huggingface-hub>=0.17.0
+accelerate>=0.21.0
 
 # Development and testing
 pytest>=7.0.0

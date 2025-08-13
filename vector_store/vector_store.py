@@ -1,4 +1,5 @@
 import os
+import re
 from typing import List, Dict, Any, Optional, Tuple
 
 from langchain_core.documents import Document
@@ -60,6 +61,27 @@ class VectorStoreManager:
             self._vector_store = None
             raise
 
+    def split_text_into_chunks(self, text: str, chunk_size: int = 300, overlap: int = 50) -> List[str]:
+        """将文本分割成语义块，基于句子边界"""
+        # 按句号、问号、感叹号分句
+        sentences = re.split(r'[。！？]', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        chunks = []
+        current_chunk = ""
+        
+        for sentence in sentences:
+            if len(current_chunk) + len(sentence) <= chunk_size:
+                current_chunk += sentence + "。"
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = sentence + "。"
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
 
     #TODO 需要改进切片策略
     def create_from_documents(
@@ -80,13 +102,24 @@ class VectorStoreManager:
         docs_to_create = documents
         # 如果需要切片
         if chunk_size and chunk_size > 0 and documents:
-            print(f"  [VectorStore] 对 {len(documents)} 个文档进行切片 (size={chunk_size}, overlap={chunk_overlap}) for creation...")
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=chunk_size,
-                chunk_overlap=chunk_overlap or 0
-            )
-            docs_to_create = text_splitter.split_documents(documents)
-            print(f"  [VectorStore] 切片完成，生成 {len(docs_to_create)} 个文档块。")
+            print(f"  [VectorStore] 对 {len(documents)} 个文档进行语义分块 (size={chunk_size}, overlap={chunk_overlap})...")
+            
+            # 使用语义分块替代RecursiveCharacterTextSplitter
+            semantic_docs = []
+            for doc in documents:
+                chunks = self.split_text_into_chunks(doc.page_content, chunk_size, chunk_overlap or 0)
+                for i, chunk in enumerate(chunks):
+                    # 复制原始元数据并添加分块信息
+                    metadata = doc.metadata.copy()
+                    metadata.update({
+                        'chunk_id': f"{len(semantic_docs)}_{i}",
+                        'chunk_index': i,
+                        'total_chunks': len(chunks)
+                    })
+                    semantic_docs.append(Document(page_content=chunk, metadata=metadata))
+            
+            docs_to_create = semantic_docs
+            print(f"  [VectorStore] 语义分块完成，生成 {len(docs_to_create)} 个文档块。")
 
         if not docs_to_create:
             print("警告: 没有文档（或切片后为空）可用于创建向量存储")
@@ -163,13 +196,24 @@ class VectorStoreManager:
             docs_to_add = documents
             # 如果需要切片
             if chunk_size and chunk_size > 0:
-                print(f"  [VectorStore] 对 {len(documents)} 个文档进行切片 (size={chunk_size}, overlap={chunk_overlap})...")
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap or 0 # 如果 overlap 未提供则默认为 0
-                )
-                docs_to_add = text_splitter.split_documents(documents)
-                print(f"  [VectorStore] 切片完成，生成 {len(docs_to_add)} 个文档块。")
+                print(f"  [VectorStore] 对 {len(documents)} 个文档进行语义分块 (size={chunk_size}, overlap={chunk_overlap})...")
+                
+                # 使用语义分块替代RecursiveCharacterTextSplitter
+                semantic_docs = []
+                for doc in documents:
+                    chunks = self.split_text_into_chunks(doc.page_content, chunk_size, chunk_overlap or 0)
+                    for i, chunk in enumerate(chunks):
+                        # 复制原始元数据并添加分块信息
+                        metadata = doc.metadata.copy()
+                        metadata.update({
+                            'chunk_id': f"{len(semantic_docs)}_{i}",
+                            'chunk_index': i,
+                            'total_chunks': len(chunks)
+                        })
+                        semantic_docs.append(Document(page_content=chunk, metadata=metadata))
+                
+                docs_to_add = semantic_docs
+                print(f"  [VectorStore] 语义分块完成，生成 {len(docs_to_add)} 个文档块。")
 
             if not self._vector_store:
                 print("向量存储尚未初始化，将从提供的文档创建新的内存向量库。")
