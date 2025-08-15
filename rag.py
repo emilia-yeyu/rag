@@ -13,6 +13,7 @@ from langchain_core.runnables import RunnablePassthrough
 
 # 导入现有组件
 from document_loader.local_document_processor import LocalDocumentProcessor
+from document_loader.multi_file_processor import MultiFileProcessor
 from embedding.adapter import EmbeddingAdapter
 from llm.adapter import LLMAdapter
 from vector_store.vector_store import VectorStoreManager
@@ -27,22 +28,24 @@ load_dotenv()
 class SimpleRAG:
     """简单RAG系统"""
     
-    def __init__(self, document_path: str = "1.txt"):
+    def __init__(self, data_dir: str = "data"):
         """初始化RAG系统"""
         # 如果是相对路径，尝试在脚本所在目录查找
-        if not os.path.isabs(document_path):
+        if not os.path.isabs(data_dir):
             script_dir = os.path.dirname(os.path.abspath(__file__))
-            full_path = os.path.join(script_dir, document_path)
+            full_path = os.path.join(script_dir, data_dir)
             if os.path.exists(full_path):
-                document_path = full_path
+                data_dir = full_path
         
-        self.document_path = document_path
-        print(f"🚀 初始化简单RAG系统...")
-        print(f"📁 文档路径: {self.document_path}")
+        self.data_dir = data_dir
+        print(f"🚀 初始化多文件RAG系统...")
+        print(f"📁 数据目录: {self.data_dir}")
         
-        # 检查文档是否存在
-        if not os.path.exists(document_path):
-            raise FileNotFoundError(f"文档文件不存在: {document_path}")
+        # 检查数据目录是否存在
+        if not os.path.exists(data_dir):
+            raise FileNotFoundError(f"数据目录不存在: {data_dir}")
+        if not os.path.isdir(data_dir):
+            raise ValueError(f"路径不是目录: {data_dir}")
         
         # 初始化组件
         self._setup_components()
@@ -57,18 +60,18 @@ class SimpleRAG:
         self.embedding = EmbeddingAdapter.get_embedding("dashscope", "text-embedding-v3")
         
         # LLM
-        self.llm = LLMAdapter.get_llm("dashscope", "qwen-plus-latest", temperature=0.1)
+        self.llm = LLMAdapter.get_llm("dashscope", "qwen-turbo", temperature=0.1)
         
         # 向量存储（支持持久化）
         self.vector_store = VectorStoreManager(
             embedding_model=self.embedding,
-            collection_name="amicro_simple",
-            persist_directory="./simple_rag_db"  # 持久化目录
+            collection_name="amicro_multi_file",
+            persist_directory="./multi_file_rag_db"  # 持久化目录
         )
     
     def _build_knowledge_base(self):
         """构建知识库"""
-        print(f"📚 处理文档: {self.document_path}")
+        print(f"📚 处理数据目录: {self.data_dir}")
         
         # 检查是否已有持久化的向量库
         if self.vector_store.is_persistent() and len(self.vector_store) > 0:
@@ -76,25 +79,21 @@ class SimpleRAG:
             print(f"⚡ 跳过文档处理，直接加载现有向量库")
             return
         
-        # 直接读取单个文件
-        with open(self.document_path, 'r', encoding='utf-8') as f:
-            content = f.read()
+        # 使用多文件处理器加载所有txt文件
+        processor = MultiFileProcessor(self.data_dir)
+        documents = processor.load_documents()
         
-        # 创建文档对象
-        from langchain_core.documents import Document
-        document = Document(
-            page_content=content,
-            metadata={'source': self.document_path}
-        )
+        if not documents:
+            raise ValueError(f"在 {self.data_dir} 中未找到任何可用的txt文件")
         
-        print(f"📄 文档加载完成，长度: {len(content)} 字符")
+        print(f"📄 成功加载 {len(documents)} 个文档文件")
         
-        # 添加到向量存储（自动分块）
-        self.vector_store.create_from_documents(
-            [document],
-            chunk_size=800,
-            chunk_overlap=100
-        )
+        # 显示文档信息
+        total_chars = sum(doc.metadata['char_count'] for doc in documents)
+        print(f"📊 文档统计: 总字符数 {total_chars}, 平均每文档 {total_chars//len(documents)} 字符")
+        
+        # 添加到向量存储（不需要额外分块，每个文件就是一个chunk）
+        self.vector_store.create_from_documents(documents)
         
         print(f"💾 知识库构建完成，共 {len(self.vector_store)} 个文档块")
     
@@ -103,7 +102,7 @@ class SimpleRAG:
         # 创建检索器
         retriever = self.vector_store._create_retriever(
             search_type="similarity",
-            search_kwargs={"k": 5}
+            search_kwargs={"k": 2}
         )
         
         # RAG提示模板
@@ -145,7 +144,7 @@ class SimpleRAG:
             # 获取相关文档（用于显示来源）
             sources = []
             if show_sources:
-                sources = self.vector_store.search_similarity(question, k=3)
+                sources = self.vector_store.search_similarity(question, k=2)
             
             result = {
                 "question": question,
@@ -179,7 +178,9 @@ class SimpleRAG:
             "员工迟到会有什么处罚？",
             "公司的核心价值观是什么？",
             "公司有多少员工？",
-            "公司的考勤时间是怎样的？"
+            "公司的考勤时间是怎样的？",
+            "公司的创始团队有哪些人？",
+            "公司的产品线包括什么？"
         ]
         
         for i, q in enumerate(questions, 1):
@@ -228,7 +229,7 @@ def main():
     """主函数"""
     try:
         # 初始化RAG系统
-        rag = SimpleRAG("1.txt")
+        rag = SimpleRAG("data")
         
         # 选择模式
         print("\n选择模式:")
